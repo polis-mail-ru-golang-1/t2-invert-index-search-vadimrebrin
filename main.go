@@ -14,7 +14,7 @@ func main() {
 	files := os.Args[1:]
 
 	var phrase []string
-	index.BuildIndex(dict, formatFiles(files))
+	index.BuildIndex(dict, readFiles(files))
 	fmt.Println("Enter search phrase:")
 	phrase = readPhrase()
 	result = index.FindPhrase(dict, phrase)
@@ -56,8 +56,10 @@ func readPhrase() []string {
 	if scanner.Text() == "" {
 		panic("Empty phrase")
 	}
-	phrase = append(phrase, scanner.Text())
-	phrase = linesToWords(phrase)
+	for _, str := range strings.Fields(scanner.Text()) {
+		str = strings.ToLower(str)
+		phrase = append(phrase, str)
+	}
 	return phrase
 }
 
@@ -70,26 +72,19 @@ func readLines(arg string) []string {
 	var lines []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
+		for _, str := range strings.Fields(scanner.Text()) {
+			str = strings.Trim(str, ".,?!-\"")
+			str = strings.ToLower(str)
+			lines = append(lines, str)
+		}
 	}
 	return lines
 }
 
-func linesToWords(lines []string) []string {
-	var result []string
-	for _, item := range lines {
-		arr := strings.Split(item, " ")
-		for _, item := range arr {
-			result = append(result, item)
-		}
-	}
-	return result
-}
-
-func formatFiles(args []string) map[string][]string {
+func readFiles(args []string) map[string][]string {
 	files := make(map[string][]string)
 	for _, file := range args {
-		files[file] = linesToWords(readLines(file))
+		files[file] = readLines(file)
 	}
 	return files
 }
