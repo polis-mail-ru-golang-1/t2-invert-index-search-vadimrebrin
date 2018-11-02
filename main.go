@@ -3,88 +3,49 @@ package main
 import (
 	"bufio"
 	"fmt"
+	console "github.com/polis-mail-ru-golang-1/t2-invert-index-search-vadimrebrin/console"
 	index "github.com/polis-mail-ru-golang-1/t2-invert-index-search-vadimrebrin/index"
+	"net"
 	"os"
 	"strings"
 )
 
+var dict map[string]map[string]int
+
 func main() {
-	dict := make(map[string]map[string]int)
-	result := make(map[string]int)
+	dict = make(map[string]map[string]int)
 	files := os.Args[1:]
 
-	var phrase []string
-	index.BuildIndex(dict, readFiles(files))
-	fmt.Println("Enter search phrase:")
-	phrase = readPhrase()
-	result = index.FindPhrase(dict, phrase)
-	printInfo(result)
-}
-
-func printInfo(dict map[string]int) {
-	if len(dict) == 0 {
-		fmt.Println("Phrase not found")
-		return
-	}
-	var filearr []string
-	var countarr []int
-	for name, count := range dict {
-		filearr = append(filearr, name)
-		countarr = append(countarr, count)
-	}
-	for i := 0; i < len(filearr); i++ {
-		for j := i; j < len(filearr); j++ {
-			if countarr[i] < countarr[j] {
-				tempcount := countarr[i]
-				countarr[i] = countarr[j]
-				countarr[j] = tempcount
-				tempfile := filearr[i]
-				filearr[i] = filearr[j]
-				filearr[j] = tempfile
-			}
-		}
-	}
-	for i := 0; i < len(filearr); i++ {
-		fmt.Printf("File %s contains %d words of requested phrase\n", filearr[i], countarr[i])
-	}
-}
-
-func readPhrase() []string {
-	var phrase []string
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Scan()
-	if scanner.Text() == "" {
-		panic("Empty phrase")
-	}
-	for _, str := range strings.Fields(scanner.Text()) {
-		str = strings.ToLower(str)
-		phrase = append(phrase, str)
-	}
-	return phrase
-}
-
-func readLines(arg string) []string {
-	file, err := os.Open(arg)
+	index.BuildIndex(dict, console.ReadFiles(files))
+	listener, err := net.Listen("tcp", "0.0.0.0:80")
 	if err != nil {
-		panic("File not found")
+		panic(err)
 	}
-	defer file.Close()
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		for _, str := range strings.Fields(scanner.Text()) {
-			str = strings.Trim(str, ".,?!-\"")
-			str = strings.ToLower(str)
-			lines = append(lines, str)
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			panic(err)
 		}
+		go handleConnection(conn)
 	}
-	return lines
 }
 
-func readFiles(args []string) map[string][]string {
-	files := make(map[string][]string)
-	for _, file := range args {
-		files[file] = readLines(file)
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
+	name := conn.RemoteAddr().String()
+	fmt.Println(name + " connected")
+	conn.Write([]byte("Enter phrase or 'exit' to exit\n\r"))
+	scan := bufio.NewScanner(conn)
+	for scan.Scan() {
+		text := scan.Text()
+		text = strings.ToLower(text)
+		if text == "exit" {
+			fmt.Println(name + " disconnected")
+			break
+		}
+		fmt.Println(name + " entered " + text)
+		phrase := strings.Fields(text)
+		res := index.FindPhrase(dict, phrase)
+		conn.Write([]byte(console.PrintInfo(res)))
 	}
-	return files
 }
