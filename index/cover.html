@@ -1,0 +1,200 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/polis-mail-ru-golang-1/t2-invert-index-search-vadimrebrin/index/index.go (59.1%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package index
+
+import (
+        "sync"
+)
+
+//BuildIndex builds invert index for defined files
+//files - это map, где ключи - именя файлов, а значения - массив слов из этих файлов
+//dict - это map, где ключи это слова, значения - это maps где ключи - названия файла
+//из которого взято слово, а значение - колличество повторений этого слова в файле
+func BuildIndex(dict map[string]map[string]int, files map[string][]string) <span class="cov8" title="1">{
+        chanel := make(chan map[string]map[string]int)
+        var wgindex sync.WaitGroup
+        var wgput sync.WaitGroup
+
+        for nameoffile, onefile := range files </span><span class="cov8" title="1">{
+                wgindex.Add(1)
+                go indexFile(nameoffile, onefile, &amp;wgindex, chanel)
+        }</span>
+        <span class="cov8" title="1">wgput.Add(1)
+        go putToDict(chanel, dict, &amp;wgput)
+
+        wgindex.Wait()
+        close(chanel)
+
+        wgput.Wait()</span>
+}
+
+func putToDict(chanel &lt;-chan map[string]map[string]int, dict map[string]map[string]int, wgindex *sync.WaitGroup) <span class="cov8" title="1">{
+        defer wgindex.Done()
+        for data := range chanel </span><span class="cov8" title="1">{
+                for word, value := range data </span><span class="cov8" title="1">{
+                        if len(dict[word]) == 0 </span><span class="cov8" title="1">{
+                                dict[word] = value
+                        }</span> else<span class="cov8" title="1"> {
+                                for key, val := range value </span><span class="cov8" title="1">{
+                                        //если первый раз
+                                        //если не первый раз
+                                        dict[word][key] = val
+                                }</span>
+                        }
+                }
+        }
+}
+
+//nameoffile - имя файла
+//onefile - slice со всеми словами из этого файла
+//dict - это map, где ключи это слова, значения - это maps где ключи - названия файла
+func indexFile(nameoffile string, onefile []string, wgindex *sync.WaitGroup,
+        chanel chan&lt;- map[string]map[string]int) <span class="cov8" title="1">{
+        dict := make(map[string]map[string]int)
+
+        defer wgindex.Done()
+        for _, word := range onefile </span><span class="cov8" title="1">{
+                //если слово встретилось первый раз
+                if dict[word] == nil </span><span class="cov8" title="1">{
+                        filemap := make(map[string]int)
+                        dict[word] = filemap
+                }</span>
+                <span class="cov8" title="1">dict[word][nameoffile]++</span>
+        }
+        <span class="cov8" title="1">chanel &lt;- dict</span>
+}
+
+//FindPhrase finds phrase in invert index
+//phrase - это массив слов из фразы
+func FindPhrase(dict map[string]map[string]int, phrase []string) map[string]int <span class="cov0" title="0">{
+        samewords := make(map[string]map[string]int)
+        res := make(map[string]int)
+
+        for item := range dict </span><span class="cov0" title="0">{
+                for _, word := range phrase </span><span class="cov0" title="0">{
+                        if item == word </span><span class="cov0" title="0">{
+                                samewords[word] = dict[word]
+                        }</span>
+                }
+        }
+        //Checks if all words from phrase are found
+        <span class="cov0" title="0">for _, word := range phrase </span><span class="cov0" title="0">{
+                isInDict := false
+                for item := range samewords </span><span class="cov0" title="0">{
+                        if word == item </span><span class="cov0" title="0">{
+                                isInDict = true
+                                break</span>
+                        }
+                }
+                <span class="cov0" title="0">if !isInDict </span><span class="cov0" title="0">{
+                        return res
+                }</span>
+        }
+
+        <span class="cov0" title="0">for _, item := range samewords </span><span class="cov0" title="0">{
+                for name, i := range item </span><span class="cov0" title="0">{
+                        res[name] = res[name] + i
+                }</span>
+        }
+        <span class="cov0" title="0">return res</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
