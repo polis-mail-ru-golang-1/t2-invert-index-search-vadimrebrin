@@ -1,51 +1,95 @@
 package main
 
 import (
-	"bufio"
+	"encoding/json"
 	"fmt"
 	console "github.com/polis-mail-ru-golang-1/t2-invert-index-search-vadimrebrin/console"
 	index "github.com/polis-mail-ru-golang-1/t2-invert-index-search-vadimrebrin/index"
-	"net"
+	"github.com/rs/zerolog"
+	zl "github.com/rs/zerolog/log"
+	"log"
+	"net/http"
 	"os"
 	"strings"
+	"text/template"
+	"time"
 )
 
-var dict map[string]map[string]int
-
-func main() {
-	dict = make(map[string]map[string]int)
-	files := os.Args[1:]
-
-	index.BuildIndex(dict, console.ReadFiles(files))
-	listener, err := net.Listen("tcp", "0.0.0.0:80")
-	if err != nil {
-		panic(err)
-	}
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			panic(err)
-		}
-		go handleConnection(conn)
-	}
+type Configuration struct {
+	Files []string
 }
 
-func handleConnection(conn net.Conn) {
-	defer conn.Close()
-	name := conn.RemoteAddr().String()
-	fmt.Println(name + " connected")
-	conn.Write([]byte("Enter phrase or 'exit' to exit\n\r"))
-	scan := bufio.NewScanner(conn)
-	for scan.Scan() {
-		text := scan.Text()
-		text = strings.ToLower(text)
-		if text == "exit" {
-			fmt.Println(name + " disconnected")
-			break
+var dict map[string]map[string]int
+var start time.Time
+var l log.Logger
+
+func logMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		zl.Debug().
+			Str("method", r.Method).
+			Str("remote", r.RemoteAddr).
+			Str("path", r.URL.Path).
+			Int("duration", int(time.Since(start))).
+			Msgf("Called url %s", r.URL.Path)
+	})
+}
+
+func main() {
+	//Configuration
+	conf, _ := os.Open("conf.json")
+	defer conf.Close()
+	decoder := json.NewDecoder(conf)
+	configuration := Configuration{}
+	err := decoder.Decode(&configuration)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	//Logging
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	zl.Logger = zl.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	dict = make(map[string]map[string]int)
+	index.BuildIndex(dict, console.ReadFiles(configuration.Files))
+	
+	zl.Printf("Staring server at :80")
+	siteMux := http.NewServeMux()
+	siteMux.HandleFunc("/search", searchHandler)
+	siteMux.HandleFunc("/", myHandler)
+
+	staticHandler := http.StripPrefix(
+		"/data/",
+		http.FileServer(http.Dir("./static")),
+	)
+
+	siteMux.Handle("/data/", staticHandler)
+	siteHandler := logMiddleware(siteMux)
+	http.ListenAndServe(":80", siteHandler)
+}
+
+func myHandler(w http.ResponseWriter, r *http.Request) {
+	tml := template.Must(template.ParseFiles("static/index.html"))
+	tml.Execute(w, nil)
+}
+
+func searchHandler(w http.ResponseWriter, r *http.Request) {
+	zl.Printf(r.RemoteAddr + " searches " + r.FormValue("q"))
+	if r.FormValue("q") != "" {
+		text := r.FormValue("q")
+		var phrase []string
+
+		for _, str := range strings.Fields(text) {
+			str = strings.ToLower(str)
+			phrase = append(phrase, str)
 		}
-		fmt.Println(name + " entered " + text)
-		phrase := strings.Fields(text)
+
 		res := index.FindPhrase(dict, phrase)
-		conn.Write([]byte(console.PrintInfo(res)))
+		response := console.PrintInfo(res)
+		tml := template.Must(template.ParseFiles("static/search.html"))
+		tml.Execute(w, response)
+	} else {
+		http.Redirect(w, r, "/", http.StatusFound)
 	}
 }
