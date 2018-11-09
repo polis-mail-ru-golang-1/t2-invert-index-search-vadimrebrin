@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	console "github.com/polis-mail-ru-golang-1/t2-invert-index-search-vadimrebrin/console"
-	index "github.com/polis-mail-ru-golang-1/t2-invert-index-search-vadimrebrin/index"
-	"net"
+	"github.com/polis-mail-ru-golang-1/t2-invert-index-search-vadimrebrin/index"
+	"net/http"
 	"os"
 	"strings"
 )
@@ -16,36 +14,25 @@ func main() {
 	dict = make(map[string]map[string]int)
 	files := os.Args[1:]
 
-	index.BuildIndex(dict, console.ReadFiles(files))
-	listener, err := net.Listen("tcp", "0.0.0.0:80")
+	http.HandleFunc("/", handleConnection)
+	index.BuildIndex(dict, files)
+	fmt.Println("Starting server at :80")
+	err := http.ListenAndServe(":80", nil)
 	if err != nil {
 		panic(err)
 	}
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			panic(err)
-		}
-		go handleConnection(conn)
+}
+
+func handleConnection(w http.ResponseWriter, r *http.Request) {
+	name := r.RemoteAddr
+	fmt.Println(name + " connected")
+	text := r.FormValue("q")
+	if text != "" {
+		text = strings.ToLower(text)
+		fmt.Println(name + " entered " + text)
+		phrase := strings.Fields(text)
+		fmt.Fprintln(w, index.FindPhrase(dict, phrase))
 	}
 }
 
-func handleConnection(conn net.Conn) {
-	defer conn.Close()
-	name := conn.RemoteAddr().String()
-	fmt.Println(name + " connected")
-	conn.Write([]byte("Enter phrase or 'exit' to exit\n\r"))
-	scan := bufio.NewScanner(conn)
-	for scan.Scan() {
-		text := scan.Text()
-		text = strings.ToLower(text)
-		if text == "exit" {
-			fmt.Println(name + " disconnected")
-			break
-		}
-		fmt.Println(name + " entered " + text)
-		phrase := strings.Fields(text)
-		res := index.FindPhrase(dict, phrase)
-		conn.Write([]byte(console.PrintInfo(res)))
-	}
-}
+//localhost/?q=good+morning
