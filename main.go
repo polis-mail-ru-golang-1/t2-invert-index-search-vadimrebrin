@@ -49,7 +49,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
 	//logging
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	if configuration.DebugLevel {
