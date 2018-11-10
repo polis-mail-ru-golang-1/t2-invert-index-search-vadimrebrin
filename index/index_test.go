@@ -1,23 +1,15 @@
 package index
 
 import (
-	"fmt"
-	"os"
 	"reflect"
 	"testing"
 )
 
 func TestBuildIndex(t *testing.T) {
-	file, _ := os.Create("file1.txt")
-	defer os.Remove("file1.txt")
-	file.WriteString("lol kek lol golang")
-	file2, _ := os.Create("file2.txt")
-	defer os.Remove("file2.txt")
-	file2.WriteString("lol testing degree vadim")
-	file.Close()
-	file2.Close()
+	in := make(map[string][]string)
+	in["file1.txt"] = []string{"lol", "kek", "lol", "golang"}
+	in["file2.txt"] = []string{"lol", "testing", "degree", "vadim"}
 
-	names := []string{"file1.txt", "file2.txt"}
 	expected := map[string]map[string]int{
 		"testing": {
 			"file2.txt": 1,
@@ -41,7 +33,7 @@ func TestBuildIndex(t *testing.T) {
 	}
 
 	actual := make(map[string]map[string]int)
-	BuildIndex(actual, names)
+	BuildIndex(actual, in)
 	if !reflect.DeepEqual(actual, expected) {
 		t.Errorf("%v is not equal to expected %v", actual, expected)
 	}
@@ -49,21 +41,14 @@ func TestBuildIndex(t *testing.T) {
 
 func TestFindPhrase(t *testing.T) {
 	dict := make(map[string]map[string]int)
-	file, _ := os.Create("file1.txt")
-	defer os.Remove("file1.txt")
-	file.WriteString("lol kek lol golang lol")
-	file2, _ := os.Create("file2.txt")
-	defer os.Remove("file2.txt")
-	file2.WriteString("lol testing degree vadim")
-	file.Close()
-	file2.Close()
+	in := make(map[string][]string)
+	in["file1.txt"] = []string{"lol", "kek", "lol", "golang", "testing"}
+	in["file2.txt"] = []string{"lol", "testing", "degree", "vadim"}
 
-	names := []string{"file1.txt", "file2.txt"}
 	expected := "File file1.txt contains 3 words of requested phrase\n\rFile file2.txt contains 2 words of requested phrase\n\r"
 	phrase := []string{"lol", "testing"}
-	BuildIndex(dict, names)
+	BuildIndex(dict, in)
 	actual := FindPhrase(dict, phrase)
-	fmt.Println(actual)
 	if actual != expected {
 		t.Errorf("%v is not equal to expected %v", actual, expected)
 	}
