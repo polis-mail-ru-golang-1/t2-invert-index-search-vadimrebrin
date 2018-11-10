@@ -1,6 +1,7 @@
 package index
 
 import (
+	"strconv"
 	"sync"
 )
 
@@ -64,7 +65,7 @@ func indexFile(nameoffile string, onefile []string, wgindex *sync.WaitGroup,
 
 //FindPhrase finds phrase in invert index
 //phrase - это массив слов из фразы
-func FindPhrase(dict map[string]map[string]int, phrase []string) map[string]int {
+func FindPhrase(dict map[string]map[string]int, phrase []string) string {
 	samewords := make(map[string]map[string]int)
 	res := make(map[string]int)
 
@@ -85,7 +86,7 @@ func FindPhrase(dict map[string]map[string]int, phrase []string) map[string]int 
 			}
 		}
 		if !isInDict {
-			return res
+			return printInfo(res)
 		}
 	}
 
@@ -93,6 +94,37 @@ func FindPhrase(dict map[string]map[string]int, phrase []string) map[string]int 
 		for name, i := range item {
 			res[name] = res[name] + i
 		}
+	}
+	return printInfo(res)
+}
+
+//printInfo prints statistics of search
+func printInfo(dict map[string]int) string {
+	if len(dict) == 0 {
+		return "Phrase not found\n\r"
+	}
+	var filearr []string
+	var countarr []int
+	for name, count := range dict {
+		filearr = append(filearr, name)
+		countarr = append(countarr, count)
+	}
+	for i := 0; i < len(filearr); i++ {
+		for j := i; j < len(filearr); j++ {
+			if countarr[i] < countarr[j] {
+				tempcount := countarr[i]
+				countarr[i] = countarr[j]
+				countarr[j] = tempcount
+				tempfile := filearr[i]
+				filearr[i] = filearr[j]
+				filearr[j] = tempfile
+			}
+		}
+	}
+	var res string
+	for i := 0; i < len(filearr); i++ {
+		res += ("File " + string(filearr[i]) + " contains " +
+			strconv.Itoa((countarr[i])) + " words of requested phrase\n\r")
 	}
 	return res
 }
