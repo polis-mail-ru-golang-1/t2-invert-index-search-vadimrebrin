@@ -1,5 +1,5 @@
 {
-    "Port": ":80",
-    "DebugLevel": true,
+    "Address": ":80",
+    "LogLevel": "debug",
     "FilesDir": "files/"
 }

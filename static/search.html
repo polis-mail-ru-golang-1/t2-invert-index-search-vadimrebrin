@@ -1,6 +1,10 @@
 {{define "content"}}
-<h2>Results:</h2><br>
-{{range .}}
-    {{.}}<br>
-{{end}}
+    <h2>Results:</h2><br>
+    {{if not .}}
+        Phrase not found
+    {{else}}
+        {{range .}}
+        File {{.File}} contains {{.Count}} words of requested phrase<br>
+        {{end}}
+    {{end}}
 {{end}}

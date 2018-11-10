@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	//"fmt"
 	"github.com/polis-mail-ru-golang-1/t2-invert-index-search-vadimrebrin/index"
 	"github.com/rs/zerolog"
 	zl "github.com/rs/zerolog/log"
@@ -17,12 +16,12 @@ import (
 )
 
 type configuration struct {
-	Port       string
-	DebugLevel bool
+	Address    string
+	LogLevel string
 	FilesDir   string
 }
 
-var dict map[string]map[string]int
+var dict index.Index
 var start time.Time
 var l log.Logger
 
@@ -50,20 +49,20 @@ func main() {
 		panic(err)
 	}
 	//logging
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	if configuration.DebugLevel {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	logLevel, err := zerolog.ParseLevel(configuration.LogLevel)
+	if err != nil {
+		panic(err)
 	}
+	zerolog.SetGlobalLevel(logLevel)
 	zl.Logger = zl.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
 	//index initialization
-	dict = make(map[string]map[string]int)
-	//index.BuildIndex(dict, readFiles(configuration.Files))
+	dict = make(index.Index)
 	index.BuildIndex(dict, readDirectory(configuration.FilesDir))
 	zl.Info().Msg("Index built")
 
 	//starting server
-	zl.Info().Msg("Starting server at " + configuration.Port)
+	zl.Info().Msg("Starting server at " + configuration.Address)
 	siteMux := http.NewServeMux()
 	siteMux.HandleFunc("/search", searchHandler)
 	siteMux.HandleFunc("/", staticHandler)
@@ -75,7 +74,7 @@ func main() {
 
 	siteMux.Handle("/data/", staticHandler)
 	siteHandler := logMiddleware(siteMux)
-	http.ListenAndServe(configuration.Port, siteHandler)
+	http.ListenAndServe(configuration.Address, siteHandler)
 }
 
 func staticHandler(w http.ResponseWriter, r *http.Request) {
