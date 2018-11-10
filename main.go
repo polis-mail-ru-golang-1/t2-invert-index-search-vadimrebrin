@@ -46,7 +46,6 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-
 	//logging
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	zl.Logger = zl.Output(zerolog.ConsoleWriter{Out: os.Stderr})
