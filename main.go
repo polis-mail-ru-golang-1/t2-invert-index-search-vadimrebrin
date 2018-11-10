@@ -1,22 +1,25 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
-	"fmt"
+	//"fmt"
 	"github.com/polis-mail-ru-golang-1/t2-invert-index-search-vadimrebrin/index"
 	"github.com/rs/zerolog"
 	zl "github.com/rs/zerolog/log"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"strings"
-	"bufio"
 	"text/template"
 	"time"
 )
 
 type configuration struct {
-	Files []string
+	Port       string
+	DebugLevel bool
+	FilesDir   string
 }
 
 var dict map[string]map[string]int
@@ -44,19 +47,24 @@ func main() {
 	configuration := configuration{}
 	err := decoder.Decode(&configuration)
 	if err != nil {
-		fmt.Println(err)
+		panic(err)
 	}
 
 	//logging
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	if configuration.DebugLevel {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
 	zl.Logger = zl.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	//index initialization 
+	//index initialization
 	dict = make(map[string]map[string]int)
-	index.BuildIndex(dict, readFiles(configuration.Files))
-	
+	//index.BuildIndex(dict, readFiles(configuration.Files))
+	index.BuildIndex(dict, readDirectory(configuration.FilesDir))
+	zl.Info().Msg("Index built")
+
 	//starting server
-	zl.Printf("Staring server at :80")
+	zl.Info().Msg("Starting server at " + configuration.Port)
 	siteMux := http.NewServeMux()
 	siteMux.HandleFunc("/search", searchHandler)
 	siteMux.HandleFunc("/", staticHandler)
@@ -68,11 +76,11 @@ func main() {
 
 	siteMux.Handle("/data/", staticHandler)
 	siteHandler := logMiddleware(siteMux)
-	http.ListenAndServe(":80", siteHandler)
+	http.ListenAndServe(configuration.Port, siteHandler)
 }
 
 func staticHandler(w http.ResponseWriter, r *http.Request) {
-	tml := template.Must(template.ParseFiles("static/index.html"))
+	tml := template.Must(template.ParseFiles("static/layout.html"))
 	tml.Execute(w, nil)
 }
 
@@ -88,7 +96,7 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		response := index.FindPhrase(dict, phrase)
-		tml := template.Must(template.ParseFiles("static/search.html"))
+		tml := template.Must(template.ParseFiles("static/layout.html", "static/search.html"))
 		tml.Execute(w, response)
 	} else {
 		http.Redirect(w, r, "/", http.StatusFound)
@@ -119,6 +127,19 @@ func readFiles(args []string) map[string][]string {
 	files := make(map[string][]string)
 	for _, file := range args {
 		files[file] = readLines(file)
+	}
+	return files
+}
+
+func readDirectory(path string) map[string][]string {
+	files := make(map[string][]string)
+	info, err := ioutil.ReadDir(path)
+	if err != nil {
+		panic(err)
+	}
+	for _, i := range info {
+		zl.Info().Msg("Opening file " + path + i.Name())
+		files[i.Name()] = readLines(path + i.Name())
 	}
 	return files
 }

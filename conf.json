@@ -1,3 +1,5 @@
 {
-    "Files": ["AnnaKarenina.txt","AdventuresOfSherlockHolmes.txt"]
+    "Port": ":80",
+    "DebugLevel": true,
+    "FilesDir": "files/"
 }
