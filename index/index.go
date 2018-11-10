@@ -1,35 +1,36 @@
 package index
 
 import (
-	"strconv"
 	"sync"
 )
+
+type Index map[string]map[string]int
+type Result struct {
+	File  string
+	Count int
+}
 
 //BuildIndex builds invert index for defined files
 //files - это map, где ключи - именя файлов, а значения - массив слов из этих файлов
 //dict - это map, где ключи это слова, значения - это maps где ключи - названия файла
 //из которого взято слово, а значение - колличество повторений этого слова в файле
-func BuildIndex(dict map[string]map[string]int, files map[string][]string) {
-	chanel := make(chan map[string]map[string]int)
+func BuildIndex(dict Index, files map[string][]string) {
+	fileCounter := len(files)
+	chanel := make(chan Index)
 	var wgindex sync.WaitGroup
-	var wgput sync.WaitGroup
 
 	for nameoffile, onefile := range files {
 		wgindex.Add(1)
 		go indexFile(nameoffile, onefile, &wgindex, chanel)
 	}
-	wgput.Add(1)
-	go putToDict(chanel, dict, &wgput)
-
+	putToDict(chanel, dict, fileCounter)
 	wgindex.Wait()
 	close(chanel)
-
-	wgput.Wait()
 }
 
-func putToDict(chanel <-chan map[string]map[string]int, dict map[string]map[string]int, wgindex *sync.WaitGroup) {
-	defer wgindex.Done()
-	for data := range chanel {
+func putToDict(chanel <-chan Index, dict Index, fileCounter int) {
+	for i := 0; i < fileCounter; i++ {
+		data := <-chanel
 		for word, value := range data {
 			if len(dict[word]) == 0 {
 				dict[word] = value
@@ -48,8 +49,8 @@ func putToDict(chanel <-chan map[string]map[string]int, dict map[string]map[stri
 //onefile - slice со всеми словами из этого файла
 //dict - это map, где ключи это слова, значения - это maps где ключи - названия файла
 func indexFile(nameoffile string, onefile []string, wgindex *sync.WaitGroup,
-	chanel chan<- map[string]map[string]int) {
-	dict := make(map[string]map[string]int)
+	chanel chan<- Index) {
+	dict := make(Index)
 
 	defer wgindex.Done()
 	for _, word := range onefile {
@@ -65,8 +66,8 @@ func indexFile(nameoffile string, onefile []string, wgindex *sync.WaitGroup,
 
 //FindPhrase finds phrase in invert index
 //phrase - это массив слов из фразы
-func FindPhrase(dict map[string]map[string]int, phrase []string) string {
-	samewords := make(map[string]map[string]int)
+func FindPhrase(dict Index, phrase []string) []Result {
+	samewords := make(Index)
 	res := make(map[string]int)
 
 	for item := range dict {
@@ -98,35 +99,27 @@ func FindPhrase(dict map[string]map[string]int, phrase []string) string {
 	return printInfo(res)
 }
 
-
-
 //printInfo prints statistics of search
-func printInfo(dict map[string]int) string {
+func printInfo(dict map[string]int) []Result {
 	if len(dict) == 0 {
-		return "Phrase not found\n\r"
+		return nil
 	}
-	var filearr []string
-	var countarr []int
+	var result []Result
 	for name, count := range dict {
-		filearr = append(filearr, name)
-		countarr = append(countarr, count)
+		var tmp Result
+		tmp.File = name
+		tmp.Count = count
+		result = append(result, tmp)
 	}
-	for i := 0; i < len(filearr); i++ {
-		for j := i; j < len(filearr); j++ {
-			if countarr[i] < countarr[j] {
-				tempcount := countarr[i]
-				countarr[i] = countarr[j]
-				countarr[j] = tempcount
-				tempfile := filearr[i]
-				filearr[i] = filearr[j]
-				filearr[j] = tempfile
+	for i := 0; i < len(result); i++ {
+		for j := i; j < len(result); j++ {
+			if result[i].Count < result[j].Count {
+				tempcount := result[i]
+				result[i] = result[j]
+				result[j] = tempcount
 			}
 		}
 	}
-	var res string
-	for i := 0; i < len(filearr); i++ {
-		res += ("File " + string(filearr[i]) + " contains " +
-			strconv.Itoa((countarr[i])) + " words of requested phrase\n\r")
-	}
-	return res
+
+	return result
 }

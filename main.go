@@ -2,37 +2,102 @@ package main
 
 import (
 	"bufio"
-	"fmt"
+	"encoding/json"
 	"github.com/polis-mail-ru-golang-1/t2-invert-index-search-vadimrebrin/index"
+	"github.com/rs/zerolog"
+	zl "github.com/rs/zerolog/log"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"strings"
+	"text/template"
+	"time"
 )
 
-var dict map[string]map[string]int
+type configuration struct {
+	Address    string
+	LogLevel string
+	FilesDir   string
+}
+
+var dict index.Index
+var start time.Time
+var l log.Logger
+
+func logMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		zl.Debug().
+			Str("method", r.Method).
+			Str("remote", r.RemoteAddr).
+			Str("path", r.URL.Path).
+			Int("duration", int(time.Since(start))).
+			Msgf("Called url %s", r.URL.Path)
+	})
+}
 
 func main() {
-	dict = make(map[string]map[string]int)
-	files := os.Args[1:]
-
-	http.HandleFunc("/", handleConnection)
-	index.BuildIndex(dict, readFiles(files))
-	fmt.Println("Starting server at :80")
-	err := http.ListenAndServe(":80", nil)
+	//configuration
+	conf, _ := os.Open("conf.json")
+	defer conf.Close()
+	decoder := json.NewDecoder(conf)
+	configuration := configuration{}
+	err := decoder.Decode(&configuration)
 	if err != nil {
 		panic(err)
 	}
+	//logging
+	logLevel, err := zerolog.ParseLevel(configuration.LogLevel)
+	if err != nil {
+		panic(err)
+	}
+	zerolog.SetGlobalLevel(logLevel)
+	zl.Logger = zl.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	//index initialization
+	dict = make(index.Index)
+	index.BuildIndex(dict, readDirectory(configuration.FilesDir))
+	zl.Info().Msg("Index built")
+
+	//starting server
+	zl.Info().Msg("Starting server at " + configuration.Address)
+	siteMux := http.NewServeMux()
+	siteMux.HandleFunc("/search", searchHandler)
+	siteMux.HandleFunc("/", staticHandler)
+
+	staticHandler := http.StripPrefix(
+		"/data/",
+		http.FileServer(http.Dir("./static")),
+	)
+
+	siteMux.Handle("/data/", staticHandler)
+	siteHandler := logMiddleware(siteMux)
+	http.ListenAndServe(configuration.Address, siteHandler)
 }
 
-func handleConnection(w http.ResponseWriter, r *http.Request) {
-	name := r.RemoteAddr
-	fmt.Println(name + " connected")
-	text := r.FormValue("q")
-	if text != "" {
-		text = strings.ToLower(text)
-		fmt.Println(name + " entered " + text)
-		phrase := strings.Fields(text)
-		fmt.Fprintln(w, index.FindPhrase(dict, phrase))
+func staticHandler(w http.ResponseWriter, r *http.Request) {
+	tml := template.Must(template.ParseFiles("static/layout.html"))
+	tml.Execute(w, nil)
+}
+
+func searchHandler(w http.ResponseWriter, r *http.Request) {
+	zl.Printf(r.RemoteAddr + " searches " + r.FormValue("q"))
+	if r.FormValue("q") != "" {
+		text := r.FormValue("q")
+		var phrase []string
+
+		for _, str := range strings.Fields(text) {
+			str = strings.ToLower(str)
+			phrase = append(phrase, str)
+		}
+
+		response := index.FindPhrase(dict, phrase)
+		tml := template.Must(template.ParseFiles("static/layout.html", "static/search.html"))
+		tml.Execute(w, response)
+	} else {
+		http.Redirect(w, r, "/", http.StatusFound)
 	}
 }
 
@@ -64,4 +129,15 @@ func readFiles(args []string) map[string][]string {
 	return files
 }
 
-//localhost/?q=good+morning
+func readDirectory(path string) map[string][]string {
+	files := make(map[string][]string)
+	info, err := ioutil.ReadDir(path)
+	if err != nil {
+		panic(err)
+	}
+	for _, i := range info {
+		zl.Info().Msg("Opening file " + path + i.Name())
+		files[i.Name()] = readLines(path + i.Name())
+	}
+	return files
+}
