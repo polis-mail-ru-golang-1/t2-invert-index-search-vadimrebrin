@@ -1,10 +1,7 @@
 package index
 
 import (
-	"bufio"
-	"os"
 	"strconv"
-	"strings"
 	"sync"
 )
 
@@ -12,12 +9,10 @@ import (
 //files - это map, где ключи - именя файлов, а значения - массив слов из этих файлов
 //dict - это map, где ключи это слова, значения - это maps где ключи - названия файла
 //из которого взято слово, а значение - колличество повторений этого слова в файле
-func BuildIndex(dict map[string]map[string]int, fileNames []string) {
+func BuildIndex(dict map[string]map[string]int, files map[string][]string) {
 	chanel := make(chan map[string]map[string]int)
 	var wgindex sync.WaitGroup
 	var wgput sync.WaitGroup
-
-	files := readFiles(fileNames)
 
 	for nameoffile, onefile := range files {
 		wgindex.Add(1)
@@ -103,33 +98,7 @@ func FindPhrase(dict map[string]map[string]int, phrase []string) string {
 	return printInfo(res)
 }
 
-//ReadLines reads file and converts it to slice of lines
-func ReadLines(arg string) []string {
-	file, err := os.Open(arg)
-	if err != nil {
-		panic("File not found")
-	}
-	defer file.Close()
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		for _, str := range strings.Fields(scanner.Text()) {
-			str = strings.Trim(str, ".,?!-\"")
-			str = strings.ToLower(str)
-			lines = append(lines, str)
-		}
-	}
-	return lines
-}
 
-//readFiles reads files and returns map of these files
-func readFiles(args []string) map[string][]string {
-	files := make(map[string][]string)
-	for _, file := range args {
-		files[file] = ReadLines(file)
-	}
-	return files
-}
 
 //printInfo prints statistics of search
 func printInfo(dict map[string]int) string {
